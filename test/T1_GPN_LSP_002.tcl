@@ -70,6 +70,7 @@ exec tclsh "$0" ${1+"$@"}
 set startSeconds [clock seconds]
 package require gwd 2.0
 package require stcPack
+package require md5
 if {[catch {
 	close stdout
 	file mkdir "log"
@@ -402,8 +403,6 @@ if {[catch {
     stc::config $hGeneratorConfig1 -SchedulingMode RATE_BASED
     set hanalyzer1 [stc::get $hport1 -children-analyzer]
     set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "251658240" "251658240" "4294967295"]
-    # set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-    # set hAnalyzerFrCofFilter1 [stc::create AnalyzerFrameConfigFilter -under $hanalyzer1 -FrameConfig $filter1]
     stc::config $hanalyzer1 -FilterOnStreamId "FALSE"
     set hcapture1 [stc::get $hport1 -children-capture]
     set hCaptureFilter1 [stc::get $hcapture1 -children-CaptureFilter]
@@ -415,8 +414,6 @@ if {[catch {
     stc::config $hGeneratorConfig2 -SchedulingMode RATE_BASED
     set hanalyzer2 [stc::get $hport2 -children-analyzer]
     set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251658240" "251658240" "4294967295"]
-    # set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>}
-    # set hAnalyzerFrCofFilter2 [stc::create AnalyzerFrameConfigFilter -under $hanalyzer2 -FrameConfig $filter2]
     stc::config $hanalyzer2 -FilterOnStreamId "FALSE"
     set hcapture2 [stc::get $hport2 -children-capture]
     set hCaptureFilter2 [stc::get $hcapture2 -children-CaptureFilter]
@@ -491,9 +488,6 @@ if {[catch {
         -OffsetReference {eth1.vlans.Vlan.id} \
         -Name {Modifier} ]
 
-    # set hStream1 [gwd::STC_createStream $dStreamData1 $hport1 $fileId]
-    # set hStream2 [gwd::STC_createStream $dStreamData2 $hport2 $fileId]
-
     stc::config [stc::get $dStreamData1 -AffiliationStreamBlockLoadProfile] -LoadUnit "FRAMES_PER_SECOND" -Load "10000" 
     stc::config [stc::get $dStreamData2 -AffiliationStreamBlockLoadProfile] -LoadUnit "FRAMES_PER_SECOND" -Load "10000" 
 
@@ -521,7 +515,8 @@ if {[catch {
     array set aMirror "dir1 egress port1 $GPNPort6 dir2 \"\" port2 \"\""
     gwd::GWpublic_CfgPortMirror $telnet3 $matchType3 $Gpn_type3 $fileId $GPNTestEth2 aMirror
     lappend flag1_Case2 [LSP_ApsMessageConfirm "10000" "1" 0 "0f 00 00 00 " "0f 00 00 00 "]
-
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fileId $GPNTestEth1
+    gwd::GWpublic_DelPortMirror $telnet3 $matchType3 $Gpn_type3 $fileId $GPNTestEth2
 	if {"1" in $flag1_Case2} {
 		set flagCase2 1
 		gwd::GWpublic_print "NOK" "FB1（结论）NE1($gpnIp1)和NE3($gpnIp3)业务正常情况下APS报文状态非0f00 0000，异常" $fileId 
@@ -538,21 +533,17 @@ if {[catch {
 	stc::delete $hfilter232BitFilAna0
 	set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><vlans name="anon_4271"><Vlan name="Vlan"><id filterMinValue="1101" filterMaxValue="1230">4095</id></Vlan></vlans></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>}
 	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><vlans name="anon_4253"><Vlan name="Vlan"><id filterMinValue="1101" filterMaxValue="1230">4095</id></Vlan></vlans></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set AnalyzerFrameConfigFilter1 [stc::create "AnalyzerFrameConfigFilter" \
-        -under $hanalyzer1 \
-        -Summary {Vlan:ID = FFF Min Value = 1101 Max Value = [expr 1100+$lsp_num]} \
-        -FrameConfig $filter1]
-    set AnalyzerFrameConfigFilter2 [stc::create "AnalyzerFrameConfigFilter" \
-        -under $hanalyzer2 \
-        -Summary {Vlan:ID = FFF Min Value = 1101 Max Value = [expr 1100+$lsp_num]} \
-        -FrameConfig $filter2]
-    set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 "1101" "[expr 1100+$lsp_num]"]
-    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 "1101" "[expr 1100+$lsp_num]"]
+	set startRange "1101"
+	set endRange "[expr 1100+$lsp_num]"
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+    set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
 	gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case2_$tcId.xml" [pwd]/Untitled
-	lappend flag2_Case2 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1101+$lsp_num]" "" valuemin valuemax]
+	lappend flag2_Case2 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     lappend flag2_Case2 [gwd::GWpublic_ShowMplsOAM $telnet1 $matchType1 $Gpn_type1 $fileId "lsp" "1"]
     lappend flag2_Case2 [gwd::GWpublic_ShowMplsOAM $telnet1 $matchType1 $Gpn_type1 $fileId "lsp" "2"]
     puts $fileId ""
@@ -583,7 +574,7 @@ if {[catch {
     set lport1 "$hport1 $hport2"
     #此处有倒换发生
     puts $fileId ""
-    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     #清除仪表上的信息
     after 20000
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
@@ -592,7 +583,7 @@ if {[catch {
     puts $fileId "	*****清除仪表上的信息*****"
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     
-    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" value valuemin valuemax]
+    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     
     stc::perform ResultsClearAll -PortList $lport1
@@ -607,7 +598,10 @@ if {[catch {
     set tcId 0
 	incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case3_$tcId.xml" [pwd]/Untitled
-
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
+    array set aMirror "dir1 egress port1 $GPNPort6 dir2 \"\" port2 \"\""
+    gwd::GWpublic_CfgPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2 aMirror
     lappend flag1_Case3 [LSP_ApsMessageConfirm1 "20000" "2" "0" "bf 01 01 00 "]
     puts $fileId ""
     puts $fileId "	*****恢复NE1工作LSP的NNI口*****"
@@ -621,36 +615,38 @@ if {[catch {
     lappend flag1_Case3 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
     lappend flag1_Case3 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "protect"]
     lappend flag1_Case3 [LSP_ApsMessageConfirm "10000" "3" 0 "5f 01 01 00 " "0f 01 01 00 "]
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
+    gwd::GWpublic_DelPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2
     after $WaiteTime
     lappend flag1_Case3 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "NR"]
     lappend flag1_Case3 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
     lappend flag1_Case3 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "work"]
- #    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	# set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	# stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
- #    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
- 	stc::delete $hfilter132BitFilAna0
+    stc::delete $hfilter132BitFilAna0
  	stc::delete $hfilter232BitFilAna0
- 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 "1101" "[expr 1100+$lsp_num]"]
-    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 "1101" "[expr 1100+$lsp_num]"]
+ 	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
 	stc::apply
 	gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+	lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
-    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
- #    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	# set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	# stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
- #    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
+    lappend flag1_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
  	stc::delete $Analyzer16BitFilter1
  	stc::delete $Analyzer16BitFilter2
  	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "251658240" "251658240" "4294967295"]
  	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251658240" "251658240" "4294967295"]
 	stc::apply
+	array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
+    array set aMirror "dir1 egress port1 $GPNPort6 dir2 \"\" port2 \"\""
+    gwd::GWpublic_CfgPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2 aMirror
 	lappend flag1_Case3 [LSP_ApsMessageConfirm "10000" "4" 0 "0f 00 00 00 " "0f 00 00 00 "]
+	gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
+    gwd::GWpublic_DelPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2
     puts $fileId ""
     if {"1" in $flag1_Case3} {
 		set flagCase3 1
@@ -664,12 +660,12 @@ if {[catch {
     puts $fileId ""
     gwd::GWpublic_sendSameStrToFiles "$fd_debug $fd_log $fileId" "=====中间节点重启触发倒换测试，开始====="
     ## 设置APS报文的过滤量和新的捕获报文
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
-    stc::config $hfilter232BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+ 	stc::delete $hfilter132BitFilAna0
+ 	stc::delete $hfilter232BitFilAna0
+ 	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     stc::perform ResultsClearAll -PortList $lport1
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
@@ -677,26 +673,20 @@ if {[catch {
     gwd::GWpublic_SaveCfg $telnet2 $matchType2 $Gpn_type2 $fileId
     gwd::GWpublic_Reboot $telnet2 $matchType2 $Gpn_type2 $fileId
 
-    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" vlauemin valuemax]
+    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" vlauemin valuemax]
     #清除仪表上的信息
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    
-    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     after [expr 2*$rebootTime]
-    
     after $WaiteTime
-
     set telnet2 [gwd::GWpublic_loginGpn $gpnIp2 $userName2 $password2 $matchType2 $Gpn_type2 $fileId]
-    
-    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag2_Case3 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    
     puts $fileId ""
     if {"1" in $flag2_Case3} {
     	set flagCase3 1
@@ -720,56 +710,55 @@ if {[catch {
     gwd::GWpublic_sendSameStrToFiles "$fd_debug $fd_log $fileId" "=====人工倒换到保护测试，开始====="
     stc::perform ResultsClearAll -PortList $lport1
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    
-    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
-    
+    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     lappend flag1_Case4 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err] 
-    
     lappend flag1_Case4 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "MSP"]
     lappend flag1_Case4 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
     lappend flag1_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "protect"]
     lappend flag1_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $Gpn_type3 $telnet3 "1" "protect"]
-    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "2130772224" -EndOfRange "2130772224" -Mask "4294967295"
-    stc::config $hfilter232BitFilAna0 -StartOfRange "251724032" -EndOfRange "251724032" -Mask "4294967295"
+ 	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "2130772224" "2130772224" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     set tcId
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case4_$tcId.xml" [pwd]/Untitled
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
+    array set aMirror "dir1 egress port1 $GPNPort6 dir2 \"\" port2 \"\""
+    gwd::GWpublic_CfgPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2 aMirror
     lappend flag1_Case4 [LSP_ApsMessageConfirm "10000" "5" 0 "7f 01 01 00 " "0f 01 01 00 "]
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
-    stc::config $hfilter232BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
+    gwd::GWpublic_DelPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2
+    stc::delete $hfilter132BitFilAna0
+ 	stc::delete $hfilter232BitFilAna0
+ 	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
-    
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    
-    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
    
     lappend flag1_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
-	lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag1_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
     puts $fileId ""
@@ -790,37 +779,35 @@ if {[catch {
     lappend flag2_Case4 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
     lappend flag2_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "work"]
     lappend flag2_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $gpnIp3 $telnet3 "1" "work"]
-
-    lappend flag2_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag2_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag2_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag2_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "3741319168" -EndOfRange "3741319168" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "3741319168" "3741319168" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case4_$tcId.xml" [pwd]/Untitled
-    
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
     lappend flag2_Case4 [LSP_ApsMessageConfirm1 "10000" "6" "0" "df 00 00 00 "]
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
     lappend flag2_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
     lappend flag2_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err]
-	set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
-    
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag2_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag2_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
     puts $fileId ""
@@ -842,37 +829,41 @@ if {[catch {
     lappend flag3_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $Gpn_type1 $telnet1 "1" "protect"]
     lappend flag3_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $Gpn_type3 $telnet3 "1" "protect"]
 
-    lappend flag3_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag3_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag3_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag3_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "3741384960" -EndOfRange "3741384960" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "3741384960" "3741384960" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case4_$tcId.xml" [pwd]/Untitled
-    
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
+    array set aMirror "dir1 egress port1 $GPNPort6 dir2 \"\" port2 \"\""
+    gwd::GWpublic_CfgPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2 aMirror
     lappend flag3_Case4 [LSP_ApsMessageConfirm "10000" "7" 0 "df 01 01 00 " "0f 01 01 00 "]
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
+    gwd::GWpublic_DelPortMirror $telnet3 $matchType3 $Gpn_type3 $fd_log $GPNTestEth2
     lappend flag3_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
 	lappend flag3_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err]
     lappend flag3_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsw" err]
-	
-	set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag3_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag3_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
     puts $fileId ""
@@ -894,39 +885,40 @@ if {[catch {
     lappend flag4_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $Gpn_type1 $telnet1 "1" "work"]
     lappend flag4_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $Gpn_type3 $telnet3 "1" "work"]
 
-    lappend flag4_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag4_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag4_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "4278190080" -EndOfRange "4278190080" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "4278190080" "4278190080" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case4_$tcId.xml" [pwd]/Untitled
-    
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
     lappend flag4_Case4 [LSP_ApsMessageConfirm1 "20000" "8" "0" "ff 00 00 00 "]
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
     lappend flag4_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
 	lappend flag4_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err]
 	lappend flag4_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsw" err]
 	lappend flag4_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsp" err]
 	lappend flag4_Case4 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "exer" err]
-	
-	set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag4_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag4_Case4 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
     puts $fileId ""
@@ -948,26 +940,25 @@ if {[catch {
     lappend flag5_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $Gpn_type1 $telnet1 "1" "work"]
     lappend flag5_Case4 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $Gpn_type3 $telnet3 "1" "work"]
 
-    lappend flag5_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag5_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     puts $fileId ""
     puts $fileId "	*****清除仪表上的信息*****"
     stc::perform ResultsClearAll -PortList $lport1
     after 2000
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag5_Case4 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag5_Case4 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "251658240" -EndOfRange "251658240" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "251658240" "251658240" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case4_$tcId.xml" [pwd]/Untitled
     
     lappend flag5_Case4 [LSP_ApsMessageConfirm1 "20000" "9" "0" "0f 00 00 00 "]
-	
+	gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
     if {"1" in $flag5_Case4} {
     	set flagCase4 1
     	gwd::GWpublic_print "NOK" "FD5（结论）清除测试，业务异常" $fileId
@@ -986,23 +977,24 @@ if {[catch {
     set flag2_Case5 0
     set flag3_Case5 0
     set flag4_Case5 0
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag1_Case5 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag1_Case5 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	stc::perform ResultsClearAll -PortList $lport1
 	gwd::GWpublic_CfgPortState $telnet1 $matchType $Gpn_type1 $fileId $GPNPort1 "shutdown"
 	lappend flag1_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "SFW"] 
     lappend flag1_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "SFW"]
-    lappend flag1_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag1_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
 	gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag1_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag1_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     stc::perform ResultsClearAll -PortList $lport1
     lappend flag1_Case5 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err]
@@ -1017,42 +1009,44 @@ if {[catch {
     if {"1" in $flag1_Case5} {
     	set flagCase5 1
     } 
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "1862270976" -EndOfRange "1862270976" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "1593901312" "1593901312" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     set tcId 0
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case5_$tcId.xml" [pwd]/Untitled
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
     lappend flag2_Case5 [LSP_ApsMessageConfirm1 "20000" "10" "0" "5f 01 01 00 "]
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
     ###人工倒换到工作
     if {"1" in $flag2_Case5} {
     	set flagCase5 1
     }
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     lappend flag3_Case5 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
     lappend flag3_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "MSW"] 
     lappend flag3_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
-    lappend flag3_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag3_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
 	gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-	lappend flag3_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	lappend flag3_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
 	stc::perform ResultsClearAll -PortList $lport1
-	set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "1862270976" -EndOfRange "1862270976" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "1862270976" "1862270976" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case5_$tcId.xml" [pwd]/Untitled
@@ -1061,45 +1055,48 @@ if {[catch {
     	set flagCase5 1
     }
     ###强制倒换到保护
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     lappend flag4_Case5 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsp" err]
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "FS-P"] 
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType3 $gpnIp3 $telnet3 "1" "protect"]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     stc::perform ResultsClearAll -PortList $lport1
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     stc::perform ResultsClearAll -PortList $lport1
-
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "3741384960" -EndOfRange "3741384960" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "3741384960" "3741384960" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case5_$tcId.xml" [pwd]/Untitled
+    array set aMirror "dir1 egress port1 $GPNPort2 dir2 \"\" port2 \"\""
+	gwd::GWpublic_CfgPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1 aMirror
     lappend flag4_Case5 [LSP_ApsMessageConfirm1 "20000" "12" "0" "df 01 01 00 "]
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+    gwd::GWpublic_DelPortMirror $telnet1 $matchType1 $Gpn_type1 $fd_log $GPNTestEth1
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     lappend flag4_Case5 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsw" err]
     lappend flag4_Case5 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msp" err]
     lappend flag4_Case5 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "msw" err]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::GWpublic_CfgPortState $telnet1 $matchType $Gpn_type1 $fileId $GPNPort1 "shutdown"
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "FS-P"] 
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
@@ -1108,43 +1105,53 @@ if {[catch {
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "SFP"] 
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "SFP"]
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "work"]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     stc::perform ResultsClearAll -PortList $lport1
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     gwd::Stop_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     stc::perform ResultsClearAll -PortList $lport1
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "4009754624" -EndOfRange "4009754624" -Mask "4294967295"
+ #    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
+	# set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:00" filterMaxValue="FF:FF:FF:FF:FF:FF">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
+	# stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
+ #    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
+	# stc::config $hfilter132BitFilAna0 -StartOfRange "4009754624" -EndOfRange "4009754624" -Mask "4294967295"
+	stc::delete $Analyzer16BitFilter1
+ 	stc::delete $Analyzer16BitFilter2
+ 	set hfilter132BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer1 "APS" "34" "START_OF_FRAME" "4009754624" "4009754624" "4294967295"]
+ 	set hfilter232BitFilAna0 [LSP_Analyzer32BitFilter $hanalyzer2 "APS" "34" "START_OF_FRAME" "251724032" "251724032" "4294967295"]
     stc::apply
     incr tcId 
     gwd::GWpublic_saveTCCfg 1 $fd_log "GPN_LSP_002_Case5_$tcId.xml" [pwd]/Untitled
     lappend flag4_Case5 [LSP_ApsMessageConfirm2 "20000" "13" "0" "ef 00 00 00 "]
     
-    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
-	stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
-    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
-	stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+ #    set filter1 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:02" filterMaxValue="00:00:00:00:00:02">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
+	# set filter2 {<frame><config><pdus><pdu name="eth1" pdu="ethernet:EthernetII"><srcMac filterMinValue="00:00:00:00:00:01" filterMaxValue="00:00:00:00:00:01">FF:FF:FF:FF:FF:FF</srcMac></pdu><pdu name="ip_1" pdu="ipv4:IPv4"></pdu></pdus></config></frame>} 
+	# stc::config $hAnalyzerFrCofFilter1 -FrameConfig $filter1
+ #    stc::config $hAnalyzerFrCofFilter2 -FrameConfig $filter2
+	# stc::config $hfilter132BitFilAna0 -StartOfRange "0" -EndOfRange "4294967295" -Mask "4294967295"
+	stc::delete $hfilter132BitFilAna0
+	stc::delete $hfilter232BitFilAna0
+	set AnalyzerFrameConfigFilter1 [Create_AnalyzerFrameConfigFilter $hanalyzer1 $filter1 $startRange $endRange]
+    set AnalyzerFrameConfigFilter2 [Create_AnalyzerFrameConfigFilter $hanalyzer2 $filter2 $startRange $endRange]
+ 	set Analyzer16BitFilter1 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter1 $startRange $endRange]
+    set Analyzer16BitFilter2 [Create_Analyzer16Bit $AnalyzerFrameConfigFilter2 $startRange $endRange]
     stc::apply
     gwd::Start_SendFlow "$hgenerator1 $hgenerator2" "$hanalyzer1 $hanalyzer2"
     lappend flag4_Case5 [gwd::LSP_StatusHignToLow $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "fsp" err]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     stc::perform ResultsClearAll -PortList $lport1
     lappend flag4_Case5 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "lp" err]
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "LO"] 
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     stc::perform ResultsClearAll -PortList $lport1
     gwd::GWpublic_CfgPortState $telnet1 $matchType $Gpn_type1 $fileId $GPNPort2 "undo shutdown"
     lappend flag4_Case5 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "clear" err]
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "NR"] 
     lappend flag4_Case5 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
-    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+    lappend flag4_Case5 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 	stc::perform ResultsClearAll -PortList $lport1
 	if {"1" in $flag4_Case5} {
     	set flagCase5 1
@@ -1162,89 +1169,29 @@ if {[catch {
     puts $fileId "**************************************************************************************\n"
     gwd::GWpublic_sendSameStrToFiles "$fd_debug $fd_log $fileId" "Test Case 6 配置保存恢复 测试开始\n"
     set flag1_Case6 0
-    set lsp101 "null";set lsp2101 "null";set pw101 "null";set ac101 "null";set meg1 "null";set meg2 "null";set pro-grp101 "null";
-
-	set lsp101_tmp "";set lsp2101_tmp "";set pw101_tmp "";set ac101_tmp "";set meg1_tmp "";set meg2_tmp "";set pro-grp101_tmp "";
-	set showMpls 3;set showCfm 3;set showMlps 3;
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mpls" result_mpls]} {
-		incr showMpls -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm]} {
-		incr showCfm -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps]} {
-		incr showMlps -1
-	}
-	regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls lsp101
-	regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls lsp2101
-	regexp {interface pw pw101.*?exit} $result_mpls pw101
-	regexp {interface ac ac101.*?exit} $result_mpls ac101
-	regexp {mpls-tp-meg meg1.*?exit} $result_cfm meg1
-	regexp {mpls-tp-meg meg2.*?exit} $result_cfm meg2
-	regexp {create pro-grp ac101.*?exit} $result_mlps pro-grp101
-
+    lappend flag1_Case6 [gwd::GW_GetRunConfig $telnet1 $matchType1 $dutType1 $fileId contentrun1 "60000"]
+    set compareFilerun1 [open "log\\LSPBH_002_第一次在$matchType1\上Showrun.txt" w]
+	puts $compareFilerun1 $contentrun1
+	close $compareFilerun1
     gwd::GWpublic_SaveCfg $telnet1 $matchType1 $Gpn_type1 $fileId
     gwd::GWpublic_SaveCfg $telnet3 $matchType3 $Gpn_type3 $fileId
 	gwd::GWpublic_Reboot $telnet1 $matchType1 $Gpn_type1 $fileId
 	after $rebootTime
 	set telnet1 [gwd::GWpublic_loginGpn $gpnIp1 $userName1 $password1 $matchType1 $Gpn_type1 $fileId]
 	set lSpawn_id [lreplace $lSpawn_id 0 0 $telnet1]
-	set showMpls 3
-	set showCfm 3
-	set showMlps 3
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId result_mpls1]} {
-		incr showMpls -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm1]} {
-		incr showCfm -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps1]} {
-		incr showMlps -1
-	}
-	regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls1 lsp101_tmp
-	regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls1 lsp2101_tmp
-	regexp {interface pw pw101.*?exit} $result_mpls1 pw101_tmp
-	regexp {interface ac ac101.*?exit} $result_mpls1 ac101_tmp
-	regexp {mpls-tp-meg meg1.*?exit} $result_cfm1 meg1_tmp
-	regexp {mpls-tp-meg meg2.*?exit} $result_cfm1 meg2_tmp
-	regexp {create pro-grp ac101.*?exit} $result_mlps1 pro-grp101_tmp
-	if {[string match $lsp101 $lsp101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后Tunnel_101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后Tunnel_101的内容发生变化" $fileId
-	}
-	if {[string match $lsp2101 $lsp2101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后Tunnel_2101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后Tunnel_2101的内容发生变化" $fileId
-	}
-	if {[string match $pw101 $pw101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后pw101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后pw101的内容发生变化" $fileId
-	}
-	if {[string match $ac101 $ac101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后ac01的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后ac101的内容发生变化" $fileId
-	}
-	if {[string match $meg1 $meg1_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后meg1的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后meg1的内容发生变化" $fileId
-	}
-	if {[string match $meg2 $meg2_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后meg2的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后meg2的内容发生变化" $fileId
-	}
-	lappend flag1_Case6 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+	####此处需要修改！！！
+	lappend flag1_Case6 [gwd::GW_GetRunConfig $telnet1 $matchType1 $dutType1 $fileId contentrun2 "60000"]
+	set compareFilerun2 [open "log\\LSPBH_002_重启后在$matchType1\上Showrun.txt" w]
+	puts $compareFilerun2 $contentrun2
+	close $compareFilerun2
+	if {[md5::md5 -hex -filename "log\\LSPBH_002_第一次在$matchType1\上Showrun.txt"]==[md5::md5 -hex -filename "log\\LSPBH_002_重启后在$matchType1\上Showrun.txt"]} {
+				gwd::GWpublic_print "OK" "在$matchType1\上进行重启前后的配置信息比对，结果相同。" $fileId
+			} else {
+				lappend flag1_Case6 1 
+				gwd::GWpublic_print "NOK" "在$matchType1\上进行重启前后的配置信息比对，结果不相同，请查看\n               \
+				LLSPBH_002_第一次在$matchType1\上Showrun.txt和LSPBH_002_重启后在$matchType1\上Showrun.txt文件。" $fileId
+			}
+	lappend flag1_Case6 [LSP_ClassDropStatisticsAna "1" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
     lappend flag1_Case6 [gwd::GWpublic_ShowMplsOAM $telnet1 $matchType1 $Gpn_type1 $fileId "lsp" "1"]
     lappend flag1_Case6 [gwd::GWpublic_ShowMplsOAM $telnet1 $matchType1 $Gpn_type1 $fileId "lsp" "2"]
     lappend flag1_Case6 [gwd::GWpublic_ShowMlpsAPS_CurPath $fileId $matchType1 $gpnIp1 $telnet1 "1" "work"]
@@ -1264,7 +1211,7 @@ if {[catch {
 			after [expr 2*$rebootTime]
 			set telnet1 [gwd::GWpublic_loginGpn $gpnIp1 $userName1 $password1 $matchType1 $Gpn_type1 $fileId]
 			set lSpawn_id [lreplace $lSpawn_id 1 1 $telnet1]
-			lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
+			lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
 			    stc::perform ResultsClearAll -PortList $lport1
 		} else {
 			puts $fileId "$matchType1\不支持NMS主备倒换或者只有一块NMS，测试跳过"
@@ -1272,38 +1219,42 @@ if {[catch {
 	}
     
     gwd::GWCard_AddSwitchSw $telnet1 $matchType1 $Gpn_type1 $fileId
-    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     stc::perform ResultsClearAll -PortList $lport1
     lappend flag1_Case7 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "WTR"]
     after $WaiteTime
-    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "50" valuemin valuemax]
+    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "50" valuemin valuemax]
     lappend flag1_Case7 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "NR"]
     lappend flag1_Case7 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet1 "3" "NR"]
     gwd::GWCard_AddSwitchSw $telnet1 $matchType1 $Gpn_type1 $fileId
     lappend flag1_Case7 [gwd::LSP_StatusSwitch $fileId $matchType1 $Gpn_type1 $telnet1 "ac101" "clear" err]
     lappend flag1_Case7 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType1 $gpnIp1 $telnet1 "1" "NR"] 
     lappend flag1_Case7 [gwd::GWpublic_ShowMlpsAPS_Status $fileId $matchType3 $gpnIp3 $telnet3 "1" "NR"]
-    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $ResultDataSet1 $ResultDataSet2 $totalPage1 $totalPage2 "1101" "[expr 1100+$lsp_num]" "" valuemin valuemax]
-    set lsp101 "null";set lsp2101 "null";set pw101 "null";set ac101 "null";set meg1 "null";set meg2 "null";set pro-grp101 "null";
+    lappend flag1_Case7 [LSP_ClassDropStatisticsAna "2" $infoObj1 $infoObj2 $startRange $endRange "" valuemin valuemax]
+ #    set lsp101 "null";set lsp2101 "null";set pw101 "null";set ac101 "null";set meg1 "null";set meg2 "null";set pro-grp101 "null";
 
-	set lsp101_tmp "";set lsp2101_tmp "";set pw101_tmp "";set ac101_tmp "";set meg1_tmp "";set meg2_tmp "";set pro-grp101_tmp "";
-	set showMpls 3;set showCfm 3;set showMlps 3;
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mpls" result_mpls]} {
-		incr showMpls -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm]} {
-		incr showCfm -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps]} {
-		incr showMlps -1
-	}
-	regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls lsp101
-	regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls lsp2101
-	regexp {interface pw pw101.*?exit} $result_mpls pw101
-	regexp {interface ac ac101.*?exit} $result_mpls ac101
-	regexp {mpls-tp-meg meg1.*?exit} $result_cfm meg1
-	regexp {mpls-tp-meg meg2.*?exit} $result_cfm meg2
-	regexp {create pro-grp ac101.*?exit} $result_mlps pro-grp101
+	# set lsp101_tmp "";set lsp2101_tmp "";set pw101_tmp "";set ac101_tmp "";set meg1_tmp "";set meg2_tmp "";set pro-grp101_tmp "";
+	# set showMpls 3;set showCfm 3;set showMlps 3;
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mpls" result_mpls]} {
+	# 	incr showMpls -1
+	# }
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm]} {
+	# 	incr showCfm -1
+	# }
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps]} {
+	# 	incr showMlps -1
+	# }
+	# regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls lsp101
+	# regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls lsp2101
+	# regexp {interface pw pw101.*?exit} $result_mpls pw101
+	# regexp {interface ac ac101.*?exit} $result_mpls ac101
+	# regexp {mpls-tp-meg meg1.*?exit} $result_cfm meg1
+	# regexp {mpls-tp-meg meg2.*?exit} $result_cfm meg2
+	# regexp {create pro-grp ac101.*?exit} $result_mlps pro-grp101
+	lappend flag1_Case7 [gwd::GW_GetRunConfig $telnet1 $matchType1 $dutType1 $fileId contentrun3 "60000"]
+    set compareFilerun3 [open "log\\LSPBH_002_主备倒换后在$matchType1\上Showrun.txt" w]
+	puts $compareFilerun3 $contentrun3
+	close $compareFilerun3
 
     gwd::GWpublic_SaveCfg $telnet1 $matchType1 $Gpn_type1 $fileId
     gwd::GWpublic_SaveCfg $telnet3 $matchType3 $Gpn_type3 $fileId
@@ -1312,61 +1263,65 @@ if {[catch {
 
 	set telnet1 [gwd::GWpublic_loginGpn $gpnIp1 $userName1 $password1 $matchType1 $Gpn_type1 $fileId]
 	set lSpawn_id [lreplace $lSpawn_id 0 0 $telnet1]
-	set showMpls 3
-	set showCfm 3
-	set showMlps 3
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId result_mpls1]} {
-		incr showMpls -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm1]} {
-		incr showCfm -1
-	}
-	while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps1]} {
-		incr showMlps -1
-	}
-	regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls1 lsp101_tmp
-	regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls1 lsp2101_tmp
-	regexp {interface pw pw101.*?exit} $result_mpls1 pw101_tmp
-	regexp {interface ac ac101.*?exit} $result_mpls1 ac101_tmp
-	regexp {mpls-tp-meg meg1.*?exit} $result_cfm1 meg1_tmp
-	regexp {mpls-tp-meg meg2.*?exit} $result_cfm1 meg2_tmp
-	regexp {create pro-grp ac101.*?exit} $result_mlps1 pro-grp101_tmp
-	if {[string match $lsp101 $lsp101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后Tunnel_101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后Tunnel_101的内容发生变化" $fileId
-	}
-	if {[string match $lsp2101 $lsp2101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后Tunnel_2101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后Tunnel_2101的内容发生变化" $fileId
-	}
-	if {[string match $pw101 $pw101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后pw101的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后pw101的内容发生变化" $fileId
-	}
-	if {[string match $ac101 $ac101_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后ac01的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后ac101的内容发生变化" $fileId
-	}
-	if {[string match $meg1 $meg1_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后meg1的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后meg1的内容发生变化" $fileId
-	}
-	if {[string match $meg2 $meg2_tmp]} {
-		gwd::GWpublic_print "OK" "保存重启前后meg2的内容没有发生变化" $fileId
-	} else {
-		set flag1_Case6 1
-		gwd::GWpublic_print "NOK" "保存重启前后meg2的内容发生变化" $fileId
-	}
+	lappend flag1_Case7 [gwd::GW_GetRunConfig $telnet1 $matchType1 $dutType1 $fileId contentrun2 "60000"]
+	set compareFilerun2 [open "log\\LSPBH_002_重启后在$matchType1\上Showrun.txt" w]
+	puts $compareFilerun2 $contentrun2
+	close $compareFilerun2
+	# set showMpls 3
+	# set showCfm 3
+	# set showMlps 3
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId result_mpls1]} {
+	# 	incr showMpls -1
+	# }
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "cfm" result_cfm1]} {
+	# 	incr showCfm -1
+	# }
+	# while {[gwd::GWpublic_showRunCfgInfo $telnet1 $matchType1 $Gpn_type1 $fileId "mlps" result_mlps1]} {
+	# 	incr showMlps -1
+	# }
+	# regexp {interface lsp tunnel Tunnel_101.*?exit} $result_mpls1 lsp101_tmp
+	# regexp {interface lsp tunnel Tunnel_2101.*?exit} $result_mpls1 lsp2101_tmp
+	# regexp {interface pw pw101.*?exit} $result_mpls1 pw101_tmp
+	# regexp {interface ac ac101.*?exit} $result_mpls1 ac101_tmp
+	# regexp {mpls-tp-meg meg1.*?exit} $result_cfm1 meg1_tmp
+	# regexp {mpls-tp-meg meg2.*?exit} $result_cfm1 meg2_tmp
+	# regexp {create pro-grp ac101.*?exit} $result_mlps1 pro-grp101_tmp
+	# if {[string match $lsp101 $lsp101_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后Tunnel_101的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后Tunnel_101的内容发生变化" $fileId
+	# }
+	# if {[string match $lsp2101 $lsp2101_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后Tunnel_2101的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后Tunnel_2101的内容发生变化" $fileId
+	# }
+	# if {[string match $pw101 $pw101_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后pw101的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后pw101的内容发生变化" $fileId
+	# }
+	# if {[string match $ac101 $ac101_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后ac01的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后ac101的内容发生变化" $fileId
+	# }
+	# if {[string match $meg1 $meg1_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后meg1的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后meg1的内容发生变化" $fileId
+	# }
+	# if {[string match $meg2 $meg2_tmp]} {
+	# 	gwd::GWpublic_print "OK" "保存重启前后meg2的内容没有发生变化" $fileId
+	# } else {
+	# 	set flag1_Case6 1
+	# 	gwd::GWpublic_print "NOK" "保存重启前后meg2的内容发生变化" $fileId
+	# }
 
 
 

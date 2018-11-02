@@ -1,0 +1,69 @@
+欢迎使用 Microsoft Telnet Client 
+
+Escape 字符是 'CTRL+]'
+
+正在连接到10.10.104.31...                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+EasyPath Series GPN Switch Software
+GROS Version V02R18C01B008(Build on 08:49:35 May  9 2018)
+ProductOS Version V02R18C01B008 (Build on 08:49:35 May  9 2018)
+Copyright (c) GW Technologies Co.,Ltd. All Rights Reserved
+
+Product GPN7600, Ru
+nning on EasyPath GPN Hardware
+Sysmac : 000F.E91E.1400 
+
+Login:
+admin
+Password:
+
+
+GPN7600>
+grosadvdebug
+GPN7600(DEBUG_H)> 
+vty user limit no
+GPN7600(DEBUG_H)> 
+exit
+GPN7600>
+enable
+
+GPN7600(config)#
+
+GPN7600(config)#
+screen idle-timeout 0
+GPN7600(config)#
+screen line 0
+GPN7600(config)#欢迎使用 Microsoft Telnet Client 
+
+Escape 字符是 'CTRL+]'
+
+正在连接到10.10.104.41...                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+EasyPath Series GPN Switch Software
+GROS Version V02R18C01B008(Build on 08:49:35 May  9 2018)
+ProductOS Version V02R18C01B008 (Build on 08:49:35 May  9 2018)
+Copyright (c) GW Technologies Co.,Ltd. All Rights Reserved
+
+Product GPN7600, Ru
+nning on EasyPath GPN Hardware
+Sysmac : 000F.E912.3456 
+
+Login:
+admin
+Password:
+
+
+GPN7600>
+grosadvdebug
+GPN7600(DEBUG_H)> 
+vty user limit no
+GPN7600(DEBUG_H)> 
+exit
+GPN7600>
+enable
+
+GPN7600(config)#
+
+GPN7600(config)#
+screen idle-timeout 0
+GPN7600(config)#
+screen line 0
+GPN7600(config)#

@@ -950,7 +950,7 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
 		upvar $valuemin value1
 		upvar $valuemax value2
 		set value1 0
-		set vlaue2 0
+		set value2 0
 		set errorTmp 0
 		LSP_ClassStatisticsPortDrop $infoObj1 $vidmin $vidmax DropCntmin1 DropCntmax1
 		LSP_ClassStatisticsPortDrop $infoObj2 $vidmin $vidmax DropCntmin2 DropCntmax2
@@ -967,7 +967,7 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
 					set value2 $DropCntmax2
 				}
 				set errorTmp 1
-				gwd::GWpublic_print NOK "在主备链路正常且无倒换事件发生情况下对发流量发包速率为10000fps，业务存在丢包现象，最小丢包数为$valuemin，最大丢包数为$valuemax" $::fileId
+				gwd::GWpublic_print NOK "在主备链路正常且无倒换事件发生情况下对发流量发包速率为10000fps，业务存在丢包现象，最小丢包数为$value1，最大丢包数为$value2" $::fileId
 			} else {
 				gwd::GWpublic_print OK "在主备链路正常且无倒换事件发生情况下对发流量发包速率为10000fps，业务正常无丢包现象。" $::fileId
 			}
@@ -986,9 +986,9 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
 			}
 			if {$time == ""} {
 				set time 0
-				if {$value1 > 0 || $vlaue2 > 0} {
+				if {$value1 > 0 || $value2 > 0} {
 					set errorTmp 1
-					gwd::GWpublic_print NOK "在有倒换事件发生情况下预期业务不丢包，业务存在丢包，最小丢包数为$valuemin，最大丢包数为$valuemax。" $::fileId
+					gwd::GWpublic_print NOK "在有倒换事件发生情况下预期业务不丢包，业务存在丢包，最小丢包数为$value1，最大丢包数为$value2。" $::fileId
 				} else {
 					gwd::GWpublic_print OK "在有倒换事件发生情况下预期业务不丢包，满足要求业务无丢包。" $::fileId
 				}
@@ -997,9 +997,9 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
 				set value2 [expr $value2/10]
 				if {$value1 > $time || $value2 > $time} {
 					set errorTmp 1
-					gwd::GWpublic_print NOK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$vlauemax ms。" $::fileId
+					gwd::GWpublic_print NOK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$value1 ms\,最大约为$value2 ms。" $::fileId
 				} else {
-					gwd::GWpublic_print OK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$vlauemax ms。" $::fileId
+					gwd::GWpublic_print OK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$value1 ms\,最大约为$value2 ms。" $::fileId
 				}
 			}
 		}
@@ -1027,9 +1027,9 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
 				set valuemax [expr $valuemax/10]
 				if {$valuemin > $time || $valuemax > $time} {
 					set errorTmp 1
-					gwd::GWpublic_print NOK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$vlauemax ms。" $::fileId
+					gwd::GWpublic_print NOK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$valuemax ms。" $::fileId
 				} else {
-					gwd::GWpublic_print OK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$vlauemax ms。" $::fileId
+					gwd::GWpublic_print OK "在有倒换事件发生情况下可接受时间为$time ms，业务倒换时间最少约为$valuemin ms\,最大约为$valuemax ms。" $::fileId
 				}
 		}
 		return $errorTmp 
@@ -1050,7 +1050,7 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
   	stc::apply
   }
   proc Create_Analyzer16Bit {AnalyzerFrameConfigFilter startRange endRange} {
-  	set Analyzer16BitFilter1 [stc::create "Analyzer16BitFilter" \
+  	set Analyzer16BitFilter [stc::create "Analyzer16BitFilter" \
         -under $AnalyzerFrameConfigFilter \
         -Mask "4095" \
         -StartOfRange "$startRange" \
@@ -1059,3 +1059,9 @@ proc LSP_ClassDropStatisticsAna {flag infoObj1 infoObj2 vidmin vidmax time value
         -Offset "2" \
         -FilterName {Vlan 0 - ID^Vlan 0 - ID} ]
     }
+ proc Create_AnalyzerFrameConfigFilter {Ana filter startRange endRange} {
+ 	set AnalyzerFrameConfigFilter1 [stc::create "AnalyzerFrameConfigFilter" \
+        -under $Ana \
+        -Summary {Vlan:ID = FFF Min Value = $startRange Max Value = $endRange} \
+        -FrameConfig $filter]
+ }
